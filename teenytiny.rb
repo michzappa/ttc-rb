@@ -1,14 +1,14 @@
 require_relative 'lex'
 
 def main
-  input = "+- */"
+  input = 'IF+-123 foo* THEN/'
   lexer = Lexer.new(input)
-
-  token = lexer.get_token()
+  # puts input
+  token = lexer.get_token
   while token.kind != TokenType::EOF
     puts token.kind
-    token = lexer.get_token()
+    token = lexer.get_token
   end
 end
 
-main()
+main
