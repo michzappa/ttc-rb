@@ -15,7 +15,7 @@ def main
   parser = Parser.new(lexer, emitter)
 
   parser.program
-  emitter.write_file()
+  emitter.write_file
   puts 'Compiled to C'
   system("gcc -o #{program_name} #{program_name}.c")
   system("rm #{program_name}.c")
