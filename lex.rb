@@ -31,8 +31,7 @@ class TokenType
 end
 
 class Token
-  # attr_accessor :text
-  attr_accessor :kind
+  attr_accessor :text, :kind
 
   def initialize(token_text, token_kind)
     @text = token_text
@@ -41,7 +40,8 @@ class Token
 
   def self.check_if_keyword(token_text)
     TokenType.constants.each do |c|
-      return c if (c.to_s == token_text) && (TokenType.const_get(c) >= 100) && (TokenType.const_get(c) <= 200)
+      value = TokenType.const_get(c)
+      return value if (c.to_s == token_text) && (value >= 100) && (value <= 200)
     end
     nil
   end
