@@ -2,8 +2,9 @@ require 'set'
 require_relative 'lex'
 
 class Parser
-  def initialize(lexer)
+  def initialize(lexer, emitter)
     @lexer = lexer
+    @emitter = emitter
 
     @symbols = Set.new
     @labels_declared = Set.new
@@ -16,11 +17,15 @@ class Parser
   end
 
   def program
-    puts 'PROGRAM'
+    @emitter.header_line('#include <stdio.h>')
+    @emitter.header_line('int main(void){')
 
     next_token while check_token(TokenType::NEWLINE)
 
     statement until check_token(TokenType::EOF)
+
+    @emitter.emit_line('return 0;')
+    @emitter.emit_line('}')
 
     @labels_gotoed.each do |label|
       self.abort("Attempting to GOTO to undeclared label '#{label}'") if @labels_declared.include?(label)
@@ -30,56 +35,80 @@ class Parser
   def statement
     case @cur_token.kind
     when TokenType::PRINT
-      puts 'STATEMENT-PRINT'
       next_token
       if check_token(TokenType::STRING)
+        @emitter.emit_line("printf(\"#{@cur_token.text}\\n\");")
         next_token
       else
+        @emitter.emit('printf("%.2f\\n", (float)(')
         expression
+        @emitter.emit_line('));')
       end
     when TokenType::IF
-      puts 'STATEMENT-IF'
       next_token
+      @emitter.emit('if(')
       comparison
+
       match(TokenType::THEN)
       nl
+      @emitter.emit_line('){')
+
       statement until check_token(TokenType::ENDIF)
+
       match(TokenType::ENDIF)
+      @emitter.emit_line('}')
     when TokenType::WHILE
-      puts 'STATEMENT-WHILE'
       next_token
+      @emitter.emit('while(')
       comparison
+
       match(TokenType::REPEAT)
       nl
+      @emitter.emit_line('){')
+
       statement until check_token(TokenType::ENDWHILE)
+
       match(TokenType::ENDWHILE)
+      @emitter.emit_line('}')
     when TokenType::LABEL
-      puts 'STATEMENT-LABEL'
       next_token
 
       self.abort("Label '#{@cur_token.text}' already exists") if @labels_declared.includes?(@cur_token.text)
       @labels_declared.add(@cur_token.text)
 
+      @emitter.emit_line?("#{@cur_token.text}:")
       match(TokenType::IDENT)
     when TokenType::GOTO
-      puts 'STATEMENT-GOTO'
       next_token
       @labels_gotoed.add(@cur_token.text)
+      @emitter.emit_line("goto #{@cur_token.text};")
       match(TokenType::IDENT)
     when TokenType::LET
-      puts 'STATEMENT-LET'
       next_token
 
-      @symbols.add(@cur_token.text) unless @symbols.include?(@cur_token.text)
+      unless @symbols.include?(@cur_token.text)
+        @symbols.add(@cur_token.text)
+        @emitter.header_line("float #{@cur_token.text};")
+      end
 
+      @emitter.emit("#{@cur_token.text} = ")
       match(TokenType::IDENT)
       match(TokenType::EQ)
+
       expression
+      @emitter.emit_line(';')
     when TokenType::INPUT
-      puts 'STATEMENT-INPUT'
       next_token
 
-      @symbols.add(@cur_token.text) unless @symbols.include?(@cur_token.text)
+      unless @symbols.include?(@cur_token.text)
+        @symbols.add(@cur_token.text)
+        @emitter.header_line("float #{@cur_token.text};")
+      end
+
+      @emitter.emit_line("if(0 == scanf(\"%f\", &#{@cur_token.text})) {")
+      @emitter.emit_line("#{@cur_token.text} = 0;")
+      @emitter.emit_line('scanf("%*s");')
+      @emitter.emit_line('}')
 
       match(TokenType::IDENT)
     else
@@ -89,16 +118,16 @@ class Parser
   end
 
   def comparison
-    puts 'COMPARISON'
-
     expression
     if is_comparison_operator
+      @emitter.emit(@cur_token.text)
       next_token
       expression
     else
       self.abort("Expected comparison operator at '#{@cur_token.text}'")
     end
     while is_comparison_operator
+      @emitter.emit(@cur_token.text)
       next_token
       expression
     end
@@ -109,41 +138,42 @@ class Parser
   end
 
   def expression
-    puts 'EXPRESSION'
     term
     while check_token(TokenType::PLUS) || check_token(TokenType::MINUS)
+      @emitter.emit(@cur_token.text)
       next_token
       term
     end
   end
 
   def term
-    puts 'TERM'
-
     unary
     while check_token(TokenType::ASTERISK) || check_token(TokenType::SLASH)
+      @emitter.emit(@cur_token.text)
+
       next_token
       unary
     end
   end
 
   def unary
-    puts 'UNARY'
-
-    next_token if check_token(TokenType::PLUS) || check_token(TokenType::MINUS)
+    if check_token(TokenType::PLUS) || check_token(TokenType::MINUS)
+      @emitter.emit(@cur_token.text)
+      next_token
+    end
     primary
   end
 
   def primary
-    puts "Primary (#{@cur_token.text})"
-
     case @cur_token.kind
     when TokenType::NUMBER
+      @emitter.emit(@cur_token.text)
       next_token
     when TokenType::IDENT
       unless @symbols.include?(@cur_token.text)
         self.abort("Referencing variable '#{@cur_token.text}' before assignment")
       end
+      @emitter.emit(@cur_token.text)
       next_token
     else
       self.abort("Unexpected token at '#{@cur_token.text}'")
@@ -151,8 +181,6 @@ class Parser
   end
 
   def nl
-    puts 'NEWLINE'
-
     match(TokenType::NEWLINE)
     next_token while check_token(TokenType::NEWLINE)
   end
