@@ -17,7 +17,7 @@ def main
   parser.program
   emitter.write_file
   puts 'Compiled to C'
-  system("gcc -o #{program_name} #{program_name}.c")
+  system("gcc -w -o #{program_name} #{program_name}.c")
   system("rm #{program_name}.c")
   puts 'Compiled Executable'
 end
